@@ -1,6 +1,3 @@
-// src/services/points.ts
-
-// Asegúrate de que el puerto coincida con tu server (5174)
 const API_URL = "http://localhost:5174/api"
 
 export type UserPoint = {
@@ -8,8 +5,8 @@ export type UserPoint = {
   name: string
   description: string
   difficulty: "baja" | "media" | "alta"
-  type?: string // Opcional, por compatibilidad
-  location: { lat: number; lng: number }
+  // AHORA GUARDAMOS EL CAMINO COMPLETO
+  path: { lat: number; lng: number }[] 
 }
 
 export async function fetchUserPoints(): Promise<UserPoint[]> {
@@ -36,4 +33,36 @@ export async function saveUserPoint(point: UserPoint): Promise<UserPoint | null>
     console.error("Error saving point:", error)
     return null
   }
+}
+
+export async function deletePointApi(id: string): Promise<boolean> {
+    try {
+        const res = await fetch(`${API_URL}/points/${id}`, { method: 'DELETE' })
+        const json = await res.json()
+        return json.ok
+    } catch (error) {
+        console.error("Error eliminando:", error)
+        return false
+    }
+}
+
+export async function updatePointApi(point: UserPoint): Promise<UserPoint | null> {
+    if (!point.id) return null
+    try {
+        const res = await fetch(`${API_URL}/points/${point.id}`, {
+            method: 'PUT',
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                name: point.name,
+                description: point.description,
+                difficulty: point.difficulty,
+                path: point.path // Enviamos el path
+            }),
+        })
+        const json = await res.json()
+        return json.ok ? json.data : null
+    } catch (error) {
+        console.error("Error actualizando:", error)
+        return null
+    }
 }

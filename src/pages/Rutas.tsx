@@ -3,62 +3,52 @@ import { type UserPoint } from "../services/points"
 
 type Props = {
   onSelect: (coords: { lat: number; lng: number }) => void
-  // Ahora recibimos los datos desde el padre (App.tsx)
   officialRoutes?: Trail[]
   userRoutes?: UserPoint[]
+  onEdit: (point: UserPoint) => void
+  onDelete: (id: string) => void
 }
 
-export default function Rutas({ onSelect, officialRoutes = [], userRoutes = [] }: Props) {
+export default function Rutas({ onSelect, officialRoutes = [], userRoutes = [], onEdit, onDelete }: Props) {
   return (
     <div className="p-4 space-y-6 pb-24 bg-gray-50 min-h-full">
       
-      {/* SECCIÓN 1: Rutas Oficiales */}
+      {/* OFICIALES */}
       <div>
         <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
           <span className="bg-green-600 w-3 h-3 rounded-full"></span>
           Rutas Verificadas
         </h2>
         <div className="space-y-3">
-          {officialRoutes.length === 0 && <p className="text-gray-400 text-sm italic">Cargando rutas oficiales...</p>}
-          
           {officialRoutes.map((r) => (
             <div
               key={r.id}
               onClick={() => onSelect(r.start)}
-              className="bg-white border-l-4 border-green-500 rounded-lg p-3 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-[0.98]"
+              className="bg-white border-l-4 border-green-500 rounded-lg p-3 shadow-sm cursor-pointer hover:shadow-md transition-all"
             >
               <div className="font-bold text-gray-800">{r.name}</div>
               <div className="text-sm text-gray-600 mt-1">
                 Dificultad: <span className="font-medium capitalize">{r.difficulty}</span> • {r.lengthKm} km
-              </div>
-              <div className="text-xs text-gray-400 mt-1 font-mono">
-                {r.start.lat.toFixed(4)}, {r.start.lng.toFixed(4)}
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* SECCIÓN 2: Rutas de la Comunidad (Tus nuevos puntos) */}
+      {/* COMUNIDAD */}
       <div>
         <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
           <span className="bg-blue-600 w-3 h-3 rounded-full"></span>
-          Comunidad
+          Mis Rutas / Comunidad
         </h2>
         
         <div className="space-y-3">
-          {userRoutes.length === 0 && (
-            <div className="text-gray-500 text-sm p-4 border border-dashed border-gray-300 rounded-lg text-center bg-white/50">
-              No has agregado rutas todavía. <br/>
-              <span className="text-xs">Ve al mapa y pulsa (+) para crear una.</span>
-            </div>
-          )}
-
           {userRoutes.map((u, idx) => (
             <div
               key={u.id || idx}
-              onClick={() => onSelect(u.location)}
-              className="bg-white border-l-4 border-blue-500 rounded-lg p-3 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-[0.98]"
+              // AQUÍ ESTÁ EL CAMBIO: Usamos u.path[0]
+              onClick={() => u.path && u.path.length > 0 && onSelect(u.path[0])}
+              className="bg-white border-l-4 border-blue-500 rounded-lg p-3 shadow-sm cursor-pointer hover:shadow-md transition-all relative group"
             >
               <div className="flex justify-between items-start">
                 <div className="font-bold text-gray-800">{u.name}</div>
@@ -74,15 +64,26 @@ export default function Rutas({ onSelect, officialRoutes = [], userRoutes = [] }
                   "{u.description}"
                 </div>
               )}
-              
-              <div className="text-xs text-blue-400 mt-2 font-medium">
-                Agregado por ti
+
+              {/* BOTONES ACCIÓN */}
+              <div className="flex gap-3 mt-3 border-t pt-2 justify-end">
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onEdit(u); }}
+                    className="text-xs font-bold text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded border border-blue-200"
+                >
+                    ✏️ Editar
+                </button>
+                <button 
+                    onClick={(e) => { e.stopPropagation(); if (u.id) onDelete(u.id); }}
+                    className="text-xs font-bold text-red-600 hover:bg-red-50 px-3 py-1.5 rounded border border-red-200"
+                >
+                    🗑️ Borrar
+                </button>
               </div>
             </div>
           ))}
         </div>
       </div>
-
     </div>
   )
 }
