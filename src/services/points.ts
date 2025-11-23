@@ -1,3 +1,4 @@
+// src/services/points.ts
 const API_URL = "http://localhost:5174/api"
 
 export type UserPoint = {
@@ -5,17 +6,18 @@ export type UserPoint = {
   name: string
   description: string
   difficulty: "baja" | "media" | "alta"
-  // AHORA GUARDAMOS EL CAMINO COMPLETO
-  path: { lat: number; lng: number }[] 
+  category: "establecida" | "personalizada"
+  path?: { lat: number; lng: number }[]
+  location?: { lat: number; lng: number }
+  lengthKm?: number
 }
 
-export async function fetchUserPoints(): Promise<UserPoint[]> {
+export async function fetchPoints(): Promise<UserPoint[]> {
   try {
     const res = await fetch(`${API_URL}/points`)
     const json = await res.json()
     return json.ok ? json.data : []
   } catch (error) {
-    console.error("Error fetching points:", error)
     return []
   }
 }
@@ -29,21 +31,14 @@ export async function saveUserPoint(point: UserPoint): Promise<UserPoint | null>
     })
     const json = await res.json()
     return json.ok ? json.data : null
-  } catch (error) {
-    console.error("Error saving point:", error)
-    return null
-  }
+  } catch (error) { return null }
 }
 
 export async function deletePointApi(id: string): Promise<boolean> {
     try {
         const res = await fetch(`${API_URL}/points/${id}`, { method: 'DELETE' })
-        const json = await res.json()
-        return json.ok
-    } catch (error) {
-        console.error("Error eliminando:", error)
-        return false
-    }
+        return res.ok
+    } catch (error) { return false }
 }
 
 export async function updatePointApi(point: UserPoint): Promise<UserPoint | null> {
@@ -52,17 +47,9 @@ export async function updatePointApi(point: UserPoint): Promise<UserPoint | null
         const res = await fetch(`${API_URL}/points/${point.id}`, {
             method: 'PUT',
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                name: point.name,
-                description: point.description,
-                difficulty: point.difficulty,
-                path: point.path // Enviamos el path
-            }),
+            body: JSON.stringify(point),
         })
         const json = await res.json()
         return json.ok ? json.data : null
-    } catch (error) {
-        console.error("Error actualizando:", error)
-        return null
-    }
+    } catch (error) { return null }
 }

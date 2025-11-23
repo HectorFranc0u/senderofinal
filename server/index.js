@@ -1,94 +1,163 @@
 const express = require('express')
 const cors = require('cors')
+const { db } = require('./firebase') 
 
 const app = express()
 app.use(cors())
-app.use(express.json()) // IMPORTANTE: Permite leer JSON
+app.use(express.json())
 
-// Mocks de datos
-let alerts = [
-  { id: 1, type: 'clima', level: 'amarillo', title: 'Lluvias fuertes', message: 'Precaución', ts: Date.now() },
-]
+// Definición de Colecciones
+const POINTS_COLLECTION = 'points';
+const SOS_COLLECTION = 'sos_logs';
+const ALERTS_COLLECTION = 'alerts';
 
-let routes = [
-  { id: 'r1', name: 'El Boquerón', difficulty: 'media', lengthKm: 4.2, start: { lat: 13.734, lng: -89.290 } },
-  { id: 'r2', name: 'Ruta de Las Flores', difficulty: 'baja', lengthKm: 7.8, start: { lat: 13.864, lng: -89.736 } },
-]
+// ==========================================
+// 1. GESTIÓN DE PUNTOS (RUTAS)
+// ==========================================
 
-let userPoints = []
-
-app.get('/api/alerts', (req, res) => res.json({ ok: true, data: alerts }))
-app.get('/api/routes', (req, res) => res.json({ ok: true, data: routes }))
-app.get('/api/points', (req, res) => res.json({ ok: true, data: userPoints }))
-
-// --- CREAR (Ruta Robusta) ---
-app.post('/api/points', (req, res) => {
-  console.log("📥 Recibiendo datos:", req.body); // <-- ESTO NOS AYUDARÁ A VER EL ERROR EN CONSOLA
-
-  const { name, description, difficulty, path, location } = req.body;
-  
-  // VALIDACIÓN FLEXIBLE: Aceptamos 'path' (ruta) O 'location' (punto)
-  const hasPath = path && path.length > 0;
-  const hasLocation = location && location.lat;
-
-  if (!name || (!hasPath && !hasLocation)) {
-    console.log("❌ Rechazado: Faltan datos");
-    return res.status(400).json({ ok: false, error: 'Falta el nombre o la ruta' });
+app.get('/api/points', async (req, res) => {
+  try {
+    const snapshot = await db.collection(POINTS_COLLECTION).get();
+    const points = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    res.json({ ok: true, data: points });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
   }
-
-  // Si nos mandan path, usamos el primer punto como ubicación base
-  const finalLocation = hasLocation ? location : (hasPath ? path[0] : null);
-
-  const newPoint = {
-    id: Date.now().toString(),
-    name,
-    description,
-    difficulty: difficulty || 'baja',
-    type: hasPath ? 'ruta' : 'punto',
-    path: path || [],      // Guardamos el camino
-    location: finalLocation, // Guardamos el punto de inicio
-    createdAt: new Date()
-  };
-
-  userPoints.push(newPoint);
-  console.log('✅ Guardado:', newPoint.name);
-  res.json({ ok: true, data: newPoint });
 });
 
-// --- ELIMINAR ---
-app.delete('/api/points/:id', (req, res) => {
-  const { id } = req.params
-  const initialLength = userPoints.length
-  userPoints = userPoints.filter(p => p.id !== id)
-  
-  if (userPoints.length < initialLength) {
-      res.json({ ok: true, id })
-  } else {
-      res.status(404).json({ ok: false, error: "No encontrado" })
-  }
-})
+app.post('/api/points', async (req, res) => {
+  try {
+    const { name, description, difficulty, path, location, category, lengthKm } = req.body;
+    
+    const hasPath = path && path.length > 0;
+    const hasLocation = location && location.lat;
 
-// --- ACTUALIZAR ---
-app.put('/api/points/:id', (req, res) => {
-  const { id } = req.params
-  const { name, description, difficulty, path } = req.body // Aceptamos path
-  
-  const pointIndex = userPoints.findIndex(p => p.id === id)
-  
-  if (pointIndex !== -1) {
-      userPoints[pointIndex] = {
-          ...userPoints[pointIndex],
-          name,
-          description,
-          difficulty,
-          // Si mandan nuevo path lo actualizamos, si no, dejamos el anterior
-          path: path || userPoints[pointIndex].path 
-      }
-      res.json({ ok: true, data: userPoints[pointIndex] })
-  } else {
-      res.status(404).json({ ok: false, error: "Punto no encontrado" })
-  }
-})
+    if (!name || (!hasPath && !hasLocation)) {
+      return res.status(400).json({ ok: false, error: 'Datos incompletos' });
+    }
 
-const PORT = process.env.PORT || 5174
-app.listen(PORT, () => console.log(`✅ API Reiniciada y lista en puerto ${PORT}`))
+    const finalLocation = hasLocation ? location : (hasPath ? path[0] : null);
+
+    const newPoint = {
+      name,
+      description: description || "",
+      difficulty: difficulty || 'baja',
+      category: category || 'personalizada',
+      type: hasPath ? 'ruta' : 'punto',
+      path: path || [],
+      location: finalLocation,
+      lengthKm: lengthKm || 0,
+      createdAt: new Date().toISOString()
+    };
+
+    const docRef = await db.collection(POINTS_COLLECTION).add(newPoint);
+    console.log(`✅ Ruta guardada: ${name}`);
+    res.json({ ok: true, data: { id: docRef.id, ...newPoint } });
+
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.delete('/api/points/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.collection(POINTS_COLLECTION).doc(id).delete();
+    console.log(`🗑️ Ruta eliminada: ${id}`);
+    res.json({ ok: true, id });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.put('/api/points/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = req.body;
+    delete data.id; 
+    await db.collection(POINTS_COLLECTION).doc(id).update(data);
+    res.json({ ok: true, data: { id, ...data } });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// ==========================================
+// 2. GESTIÓN DE ALERTAS (REPORTES)
+// ==========================================
+
+// OBTENER ALERTAS (SOLO ÚLTIMAS 48 HORAS)
+app.get('/api/alerts', async (req, res) => {
+  try {
+    const snapshot = await db.collection(ALERTS_COLLECTION).orderBy('timestamp', 'desc').get();
+    
+    // Calculamos fecha límite (Hace 48 horas)
+    const cutoffDate = new Date();
+    cutoffDate.setHours(cutoffDate.getHours() - 48);
+
+    const alerts = snapshot.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .filter(alert => {
+        // Filtramos: La fecha de la alerta debe ser mayor (más nueva) que el límite
+        return new Date(alert.timestamp) > cutoffDate;
+      });
+
+    res.json({ ok: true, data: alerts });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post('/api/alerts', async (req, res) => {
+  try {
+    const { routeId, routeName, type, description, level } = req.body;
+
+    if (!routeId || !type || !description) {
+        return res.status(400).json({ ok: false, error: "Datos incompletos" });
+    }
+
+    const newAlert = {
+        routeId,
+        routeName,
+        type,
+        description,
+        level,
+        timestamp: new Date().toISOString()
+    };
+
+    const docRef = await db.collection(ALERTS_COLLECTION).add(newAlert);
+    console.log(`⚠️ Alerta reportada en ${routeName}`);
+    res.json({ ok: true, data: { id: docRef.id, ...newAlert } });
+
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// ==========================================
+// 3. GESTIÓN DE SOS
+// ==========================================
+
+app.post('/api/sos', async (req, res) => {
+  try {
+    const { lat, lng, message } = req.body || {};
+    const sosLog = {
+      lat,
+      lng,
+      message: message || "Emergencia sin mensaje",
+      timestamp: new Date().toISOString(),
+      status: 'active'
+    };
+    await db.collection(SOS_COLLECTION).add(sosLog);
+    console.log('🚨 SOS REGISTRADO:', sosLog);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ ok: false });
+  }
+});
+
+const PORT = process.env.PORT || 5174;
+app.listen(PORT, () => console.log(`🔥 Servidor escuchando en puerto ${PORT}`));
